@@ -57,7 +57,7 @@ class MnistModel:
             self.W_conv = np.array(pickle.load(f)).reshape((8, 3, 3))
 
         with open(linear, 'rb') as f:
-            self.W_linear = np.array(pickle.load(f)).reshape((-1, 8 * 26 * 26))
+            self.W_linear = np.array(pickle.load(f)).reshape((8 * 26 * 26, -1))
 
     def linear_forward(self, X):
         return np.dot(X, self.W_linear)
@@ -72,7 +72,11 @@ class MnistModel:
         return X_o
 
     def convolution_forward(self, X):
-        pass # TODO
+        res = np.empty((len(X), 8, 26, 26))
+        
+        #TODO
+
+        return res
 
     def forward_batch(self, X):
         conv_1 = self.convolution_forward(X)
