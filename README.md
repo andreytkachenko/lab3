@@ -17,3 +17,6 @@
             
             присваиваем result_image к общему результату
 ```
+### Доп материал
+1. Иллюстрация для понимания свертики с помощью матричного умножения
+https://www.researchgate.net/publication/332186100/figure/fig2/AS:743806039244803@1554348587949/Im2col-GEMM-converted-from-the-convolution-in-Fig-1-The-red-boxed-data-show-duplicated.png
