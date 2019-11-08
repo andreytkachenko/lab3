@@ -2,6 +2,7 @@ import numpy as np
 import pickle
 from mlxtend.data import loadlocal_mnist
 import math as m
+from scipy import signal
 
 np.random.seed(1)                   # заставим numpy выдавать одинаковые набор случайных чисел для каждого запуска программы
 np.set_printoptions(suppress=True)  # выводить числа в формате 0.123 а не 1.23e-1
@@ -19,7 +20,6 @@ X, y = loadlocal_mnist(
 Xt, yt = loadlocal_mnist(
         images_path="/home/andrey/datasets/mnist/t10k-images-idx3-ubyte", 
         labels_path="/home/andrey/datasets/mnist/t10k-labels-idx1-ubyte")
-
 
 def sigmoid(x, deriv=False):
     if deriv:
@@ -70,18 +70,114 @@ class MnistModel:
         X_o[X < 0] = 0
 
         return X_o
-
+    
     def convolution_forward(self, X):
-        res = np.empty((len(X), 8, 26, 26))
-        
-        #TODO
+        def img2col(X):
+            (batch_size, ch, rows, cols) = X.shape
+            (out_rows, out_cols) = (rows - 2, cols - 2)
+            wcount = out_rows * out_cols 
 
-        return res
+            res = np.empty((batch_size * wcount, ch * 3 * 3))
 
-    def forward_batch(self, X):
+            for batch in range(0, batch_size):
+                for orow in range(0, out_rows):
+                    for ocol in range(0, out_cols):
+                        row = orow
+                        col = ocol
+                        res[batch * wcount + orow * out_cols + ocol] = X[batch][:, row: row + 3, col: col + 3].flatten()
+            
+            return res
+
+        def col2img(X, bs, rows, cols):
+            (wcount, filters) = X.shape
+
+            batch_size = rows * cols
+
+            res = np.empty((bs, filters, rows, cols))
+
+            for i in range(0, wcount):
+                batch = i // batch_size
+                offset = (i % batch_size)
+                row = offset // cols
+                col = offset % cols
+
+                res[batch, :, row, col] = X[i]
+
+            return res
+
+        def gemm_convolution(X, W):
+            cols = img2col(X)
+            res = cols.dot(np.tile(W.reshape((8, -1)).T, X.shape[1]))
+
+            return col2img(res, len(X), 26, 26)
+
+        def convolve(X, W):
+            (in_rows, in_cols) = X.shape
+            (f_row, f_cols) = W.shape
+            (out_rows, out_cols) = (in_rows - 2, in_cols - 2)
+
+            out = np.empty((out_rows, out_cols))
+
+            for orow in range(0, out_rows):
+                for ocol in range(0, out_cols):
+                    row = orow
+                    col = ocol
+
+                    out[orow][ocol] = np.sum(X[row: row + f_row, col: col + f_cols] * W)
+
+            return out
+
+
+        def convolution1(X, W):
+            (filter_channels, filter_height, filter_width) = W.shape
+            (batch_size, in_channels, in_rows, in_cols) = X.shape
+            (out_channels, out_rows, out_cols) = (filter_channels, in_rows - 2, in_cols - 2)
+
+            res = np.zeros((batch_size, out_channels, out_rows, out_cols))
+
+            for batch in range(0, batch_size):
+                for och in range(0, out_channels):
+                    for ich in range(0, in_channels):
+                        res[batch][och] += signal.correlate2d(X[batch][ich], W[och], mode='valid')
+
+            return res
+
+
+        def convolution(X, W):
+            (filter_channels, filter_height, filter_width) = W.shape
+            (batch_size, in_channels, in_rows, in_cols) = X.shape
+            (out_channels, out_rows, out_cols) = (filter_channels, in_rows - 2, in_cols - 2)
+
+            res = np.empty((batch_size, out_channels, out_rows, out_cols))
+
+            for batch in range(0, batch_size):
+                print(batch)
+
+                for och in range(0, out_channels):
+                    for orow in range(0, out_rows):
+                        for ocol in range(0, out_cols):
+                            out = 0
+
+                            row = orow
+                            col = ocol
+
+                            for ch in range(0, in_channels):
+                                # for h in range(0, filter_height):
+                                #     for w in range(0, filter_width):
+                                #         out += X[batch][ch][row + h][col + w] * W[och][h][w]
+                                
+                                # немного ускорим процесс
+                                out += np.sum(X[batch][ch][row: row + filter_height, col: col + filter_width] * W[och])
+                            
+                            res[batch][och][orow][ocol] = out
+            return res
+    
+        return convolution1(X, self.W_conv)
+
+    def forward(self, X):
         conv_1 = self.convolution_forward(X)
         relu_1 = self.relu_forward(conv_1)
-        flatten_1 = relu_1.reshape(-1, 5408)
+        flatten_1 = relu_1.reshape(len(X), -1)
         linear_1 = self.linear_forward(flatten_1)
         sigmoid_1 = self.sigmoid_forward(linear_1)
         
@@ -92,6 +188,9 @@ if __name__ == "__main__":
     model = MnistModel()
     model.load("W_conv.pickle", "W_linear.pickle")
 
-    tp = model.forward_batch(Xt.reshape((-1, 1, 28, 28)))
+    # Xt = Xt[0:1000]
+    # yt = yt[0:1000]
+
+    tp = model.forward(Xt.reshape((-1, 1, 28, 28)))
 
     print((np.sum(yt == np.argmax(tp, axis=1)) / len(yt))) 
